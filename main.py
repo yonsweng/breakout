@@ -28,7 +28,7 @@ INPUT = env.observation_space.shape  # (210, 160, 3)
 OUTPUT = env.action_space.n  # 4
 HEIGHT = 84
 WIDTH = 84
-LEARNING_RATE = 0.001
+LEARNING_RATE = 0.0001
 DISCOUNT = 0.99
 EPSILON = 0.01
 MOMENTUM = 0.95
@@ -131,17 +131,17 @@ def plot_data(epoch, epoch_score, average_reward, epoch_Q, average_Q):
 class DQN(nn.Module):
     def __init__(self, in_channels, out_channels):
         super(DQN, self).__init__()
-        self.conv1 = nn.Conv2d(in_channels, 32, 8, 4)
-        self.conv2 = nn.Conv2d(32, 64, 4, 2)
-        self.conv3 = nn.Conv2d(64, 64, 3, 1)
-        self.fc1 = nn.Linear(7*7*64, 512)
-        self.fc2 = nn.Linear(512, out_channels)
+        self.conv1 = nn.Conv2d(in_channels, 32, 3, 2)
+        self.conv2 = nn.Conv2d(32, 64, 3, 2)
+        self.conv3 = nn.Conv2d(64, 64, 3, 2)
+        self.fc1 = nn.Linear(64*9*9, 256)
+        self.fc2 = nn.Linear(256, out_channels)
 
     def forward(self, x):
         x = F.relu(self.conv1(x))
         x = F.relu(self.conv2(x))
         x = F.relu(self.conv3(x))
-        x = F.relu(self.fc1(x.reshape(-1, 7*7*64)))
+        x = F.relu(self.fc1(x.reshape(-1, 64*9*9)))
         x = self.fc2(x)
         return x
 
@@ -183,8 +183,9 @@ def main():
         done = False
         start_lives = 0
         s = env.reset()
+        s1 = s.copy()
 
-        get_init_state(history, s)  # history[0 ~ 3] = pre_proc(s)
+        get_init_state(history, s1 - s)  # history[0 ~ 3] = pre_proc(s)
 
         while not done:  # until episode ends
             frame += 1  # frame counts in all episodes
@@ -221,13 +222,24 @@ def main():
 
             reward = -1 if ter else r
 
+            # 앞 frame들에 discounted reward 전파
+            if reward != 0:
+                running_reward = reward
+                idx = replay_memory.__len__() - 1
+                while idx >= 0 and replay_memory[idx][2] == 0:
+                    running_reward *= DISCOUNT
+                    replay_memory[idx][2] = running_reward
+                    idx -= 1
+
             # 새로운 프레임을 히스토리 마지막에 넣어줌
+            s1 = s1 - s
             history[:, :, 4] = pre_proc(s1)
+            s = s1
 
             # 메모리 저장 효율을 높이기 위해 5개의 프레임을 가진 히스토리를 저장
             # state와 next_state는 3개의 데이터가 겹침을 이용.
-            replay_memory.append((np.copy(history[:, :, :]),
-                                  action, reward, ter))
+            replay_memory.append([np.copy(history[:, :, :]),
+                                  action, reward, ter])
             history[:, :, :4] = history[:, :, 1:]
 
             rall += r
