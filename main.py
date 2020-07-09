@@ -258,3 +258,5 @@ def main():
                 'epoch': epoch,
                 'frame': frame
             }, 'checkpoint.tar')
+
+main()
