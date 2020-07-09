@@ -18,17 +18,17 @@ env = gym.make('BreakoutDeterministic-v4')
 MINIBATCH_SIZE = 32
 HISTORY_SIZE = 4
 TRAIN_START = 50000
-FINAL_EXPLORATION = 0.1
+FINAL_EXPLORATION = 0.05
 TARGET_UPDATE = 10000
-MEMORY_SIZE = 50000
-EXPLORATION = 1000000
+MEMORY_SIZE = 200000
+EXPLORATION = 500000
 FRAMES_PER_EPOCH = 10000
 START_EXPLORATION = 1.
 INPUT = env.observation_space.shape  # (210, 160, 3)
 OUTPUT = env.action_space.n  # 4
 HEIGHT = 84
 WIDTH = 84
-LEARNING_RATE = 0.0001
+LEARNING_RATE = 0.00005
 DISCOUNT = 0.99
 EPSILON = 0.01
 MOMENTUM = 0.95
@@ -125,7 +125,7 @@ def plot_data(epoch, epoch_score, average_reward, epoch_Q, average_Q):
     plt.ylabel('Average Reward per Episode')
     plt.plot(epoch_score, "r")
 
-    plt.savefig("graph/{}epoch.png".format(epoch - 1))
+    plt.savefig("graph.png")
 
 
 class DQN(nn.Module):
@@ -174,6 +174,8 @@ def main():
     no_life_game = False
     replay_memory = deque(maxlen=MEMORY_SIZE)
 
+    max_score = 0
+
     # Train agent during 200 epoch
     while epoch < 1000:
         episode += 1
@@ -182,10 +184,10 @@ def main():
         rall, count = 0, 0  # rall: 한 episode의 reward 합
         done = False
         start_lives = 0
-        s = env.reset()
-        s1 = s.copy()
 
-        get_init_state(history, s1 - s)  # history[0 ~ 3] = pre_proc(s)
+        s = env.reset()
+        prev_s = pre_proc(s)
+        history[:, :, :HISTORY_SIZE] = np.zeros((84, 84, HISTORY_SIZE))
 
         while not done:  # until episode ends
             frame += 1  # frame counts in all episodes
@@ -232,9 +234,9 @@ def main():
                     idx -= 1
 
             # 새로운 프레임을 히스토리 마지막에 넣어줌
-            s1 = s1 - s
-            history[:, :, 4] = pre_proc(s1)
-            s = s1
+            pre_proc_s1 = pre_proc(s1)
+            history[:, :, 4] = pre_proc_s1 - prev_s
+            prev_s = pre_proc_s1
 
             # 메모리 저장 효율을 높이기 위해 5개의 프레임을 가진 히스토리를 저장
             # state와 next_state는 3개의 데이터가 겹침을 이용.
@@ -245,8 +247,9 @@ def main():
             rall += r
 
             if frame > TRAIN_START:
-                minibatch = random.sample(replay_memory, MINIBATCH_SIZE)
-                train_minibatch(mainDQN, targetDQN, minibatch, optimizer)
+                if frame % 4 == 0:
+                    minibatch = random.sample(replay_memory, MINIBATCH_SIZE)
+                    train_minibatch(mainDQN, targetDQN, minibatch, optimizer)
 
                 # 1만 프레임일때마다 target_net 업데이트
                 if frame % TARGET_UPDATE == 0:
@@ -268,22 +271,18 @@ def main():
                   .format(episode, frame, count, rall, e,
                           np.mean(average_Q), np.mean(recent_rlist)))
 
+            # save the best model
+            score = np.mean(recent_rlist)
+            if score > max_score:
+                max_score = score
+                torch.save(mainDQN.state_dict(), 'model.pt')
+
         if epoch_on:
             epoch += 1
             plot_data(epoch, epoch_score, average_reward, epoch_Q, average_Q)
             epoch_on = False
             average_reward = deque()
             average_Q = deque()
-
-            # Model checkpoint
-            torch.save({
-                'model_state_dict': mainDQN.state_dict(),
-                'optimizer_state_dict': optimizer.state_dict(),
-                'e': e,
-                'episode': episode,
-                'epoch': epoch,
-                'frame': frame
-            }, 'checkpoint.tar')
 
 
 main()
