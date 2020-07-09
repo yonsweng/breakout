@@ -125,7 +125,7 @@ def plot_data(epoch, epoch_score, average_reward, epoch_Q, average_Q):
     plt.ylabel('Average Reward per Episode')
     plt.plot(epoch_score, "r")
 
-    plt.savefig("graph.png".format(epoch - 1))
+    plt.savefig("graph.png")
 
 
 class DQN(nn.Module):
